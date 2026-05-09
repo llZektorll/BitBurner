@@ -34,6 +34,7 @@ run auto/controller.js
 
 - **Money engine first**: early/mid game prioritizes hacking income, home RAM, port programs, and purchased servers.
 - **Aggressive rooter**: `/auto/root.js` loops continuously and nukes every eligible server as soon as port programs appear.
+- **Priority startup**: when unlocked and RAM allows it, the controller starts root, purchased servers, and IPvGO before lower-priority side systems.
 - **Early distributed hacking**: `/auto/early.js` uses rooted starter servers as worker RAM before the full batcher is active.
 - **Batch hacking at 32GB+**: `/auto/batcher.js` replaces the simple manager once home RAM reaches 32GB.
 - **Formulas-aware**: if `Formulas.exe` exists, the batcher uses formulas for better target scoring and thread tuning.
@@ -219,6 +220,18 @@ contracts.js
 ```
 
 These modules are intentionally guarded. If an API is locked in your BitNode, they idle instead of crashing.
+
+IPvGO defaults to auto mode:
+
+```text
+run auto/go.js
+```
+
+It keeps running forever, records results in `/auto/state-go.txt`, and rotates opponent/board size to balance win rate and bonus progress. Manual override still works:
+
+```text
+run auto/go.js "Illuminati" 5
+```
 
 ## BitNode Strategy
 
@@ -422,4 +435,3 @@ The dashboard summarizes the rest.
 - Uses `ns.cloud` for purchased servers when available.
 - Uses `ns.dnet` for guarded Darknet reconnaissance.
 - Avoids removed formatters like `ns.nFormat()` and `ns.formatNumber()`.
-

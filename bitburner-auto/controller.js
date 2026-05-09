@@ -1,13 +1,15 @@
 const EARLY = "/auto/early.js";
+const PRIORITY_DAEMONS = ["/auto/root.js", "/auto/servers.js", "/auto/go.js"];
 const DAEMONS = [
   "/auto/dashboard.js",
   "/auto/objectives.js",
   "/auto/bitnode.js",
   "/auto/endgame.js",
   "/auto/root.js",
+  "/auto/servers.js",
+  "/auto/go.js",
   "/auto/batcher.js",
   "/auto/manager.js",
-  "/auto/servers.js",
   "/auto/hacknet.js",
   "/auto/singularity.js",
   "/auto/backdoor.js",
@@ -20,7 +22,6 @@ const DAEMONS = [
   "/auto/bladeburner.js",
   "/auto/corp.js",
   "/auto/stanek.js",
-  "/auto/go.js",
   "/auto/darknet.js",
 ];
 
@@ -34,12 +35,13 @@ export async function main(ns) {
     const state = readState(ns);
     if (homeRam < 32) {
       startIfPossible(ns, "/auto/objectives.js");
+      startIfPossible(ns, "/auto/root.js");
       startIfPossible(ns, EARLY);
-      stopScripts(ns, DAEMONS.filter((script) => !["/auto/dashboard.js", "/auto/objectives.js"].includes(script)));
+      stopScripts(ns, DAEMONS.filter((script) => !["/auto/dashboard.js", "/auto/objectives.js", "/auto/root.js"].includes(script)));
       ns.print("bootstrap: home RAM under 32GB, running tiny early-game loop only.");
     } else {
       if (ns.isRunning(EARLY, "home")) ns.scriptKill(EARLY, "home");
-      for (const script of DAEMONS) {
+      for (const script of orderedDaemons()) {
         if (shouldRun(ns, script, homeRam, state)) startIfPossible(ns, script);
         else stopScript(ns, script);
       }
@@ -50,6 +52,10 @@ export async function main(ns) {
     );
     await ns.sleep(20000);
   }
+}
+
+function orderedDaemons() {
+  return [...PRIORITY_DAEMONS, ...DAEMONS.filter((script) => !PRIORITY_DAEMONS.includes(script))];
 }
 
 function shouldRun(ns, script, homeRam, state) {
@@ -98,7 +104,7 @@ function shouldRun(ns, script, homeRam, state) {
   if (script === "/auto/bladeburner.js") return homeRam >= 256 && Boolean(state?.goals?.bladeburner);
   if (script === "/auto/corp.js") return homeRam >= 512 && Boolean(state?.goals?.corp);
   if (script === "/auto/stanek.js") return homeRam >= 256 && Boolean(state?.goals?.stanek);
-  if (script === "/auto/go.js") return homeRam >= 256 && Boolean(state?.goals?.go);
+  if (script === "/auto/go.js") return homeRam >= 256 && Boolean(ns.go);
   if (script === "/auto/darknet.js") return homeRam >= 256 && Boolean(state?.goals?.darknet);
 
   return true;
