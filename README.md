@@ -47,16 +47,23 @@ run /auto/controller.js
 Bootstrap the installer from your GitHub repo:
 
 ```text
-wget https://raw.githubusercontent.com/USER/REPO/main/bitburner-auto/install-auto.js install-auto.js
+wget https://raw.githubusercontent.com/llZektorll/BitBurner/main/bitburner-auto/install-auto.js install-auto.js
 ```
 
 Then run it with your raw GitHub folder URL:
 
 ```text
-run install-auto.js https://raw.githubusercontent.com/USER/REPO/main/bitburner-auto --restart
+run install-auto.js https://raw.githubusercontent.com/llZektorll/BitBurner/main/bitburner-auto --restart
 ```
 
 Use `--start` to start after install without killing existing scripts, or `--restart` to kill old `/auto/` scripts first.
+
+If your GitHub branch is `master` instead of `main`, use:
+
+```text
+wget https://raw.githubusercontent.com/llZektorll/BitBurner/master/bitburner-auto/install-auto.js install-auto.js
+run install-auto.js https://raw.githubusercontent.com/llZektorll/BitBurner/master/bitburner-auto --restart
+```
 
 On a fresh save with 8GB home RAM, the controller starts only `/auto/early.js`. After you upgrade home RAM to at least 32GB, it will stop the early loop and start the larger automation daemons.
 

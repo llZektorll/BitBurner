@@ -40,7 +40,7 @@ export async function main(ns) {
 
   if (!base) {
     ns.tprint("Usage:");
-    ns.tprint("  run install-auto.js https://raw.githubusercontent.com/USER/REPO/main/bitburner-auto --restart");
+    ns.tprint("  run install-auto.js https://raw.githubusercontent.com/llZektorll/BitBurner/main/bitburner-auto --restart");
     return;
   }
 
