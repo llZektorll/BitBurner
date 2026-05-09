@@ -11,6 +11,7 @@ const REQUIRED = [
   "/auto/batcher.js",
   "/auto/manager.js",
   "/auto/root.js",
+  "/auto/network-gui.js",
   "/auto/servers.js",
   "/auto/hacknet.js",
   "/auto/singularity.js",

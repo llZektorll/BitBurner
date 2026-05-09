@@ -2,8 +2,9 @@ import { CONF, bestTargets, deploy, money, rootedServers, scanAll, tryRoot } fro
 
 const HGW = "/auto/hgw.js";
 const FILES = [HGW];
-const SPACING = 250;
+const SPACING = 120;
 const MIN_RAM = 32;
+const MAX_BATCHES_PER_PASS = 24;
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -13,37 +14,59 @@ export async function main(ns) {
   while (true) {
     for (const host of scanAll(ns)) tryRoot(ns, host);
     const state = readState(ns);
-    const target = chooseBatchTarget(ns);
-    if (!target || totalAvailableThreads(ns) < 4) {
+    if (totalAvailableThreads(ns) < 4) {
+      const target = chooseBatchTarget(ns, false)?.target;
       render(ns, "waiting", target, null, 0, state);
       await ns.sleep(10000);
       continue;
     }
 
-    const prep = await prepTarget(ns, target);
-    if (!prep.ready) {
-      render(ns, prep.action, target, null, prep.threads, state);
+    const launched = await launchDynamicPipeline(ns, state);
+    if (launched.count > 0) {
+      render(ns, `pipeline launched ${launched.count}`, launched.lastTarget, launched.lastPlan, launched.threads, state);
+      await ns.sleep(SPACING * Math.max(1, launched.count));
+      continue;
+    }
+
+    const prepTargetName = chooseBatchTarget(ns, false)?.target;
+    if (prepTargetName) {
+      const prep = await prepTarget(ns, prepTargetName);
+      render(ns, prep.ready ? "ready but no RAM" : prep.action, prepTargetName, null, prep.threads, state);
       await ns.sleep(1000);
       continue;
     }
 
-    const plan = batchPlan(ns, target);
-    if (!plan) {
-      render(ns, "no viable plan", target, null, 0, state);
-      await ns.sleep(5000);
-      continue;
-    }
-
-    const launched = await launchBatch(ns, target, plan);
-    render(ns, launched ? "batch launched" : "not enough RAM", target, plan, launched ? plan.totalThreads : 0, state);
-    await ns.sleep(Math.max(SPACING * 4, plan.cycle));
+    render(ns, "no viable target", null, null, 0, state);
+    await ns.sleep(5000);
   }
 }
 
-function chooseBatchTarget(ns) {
-  return bestTargets(ns, 20)
+async function launchDynamicPipeline(ns) {
+  const result = { count: 0, threads: 0, lastTarget: null, lastPlan: null };
+  for (let i = 0; i < MAX_BATCHES_PER_PASS; i++) {
+    const candidate = chooseBatchTarget(ns, true);
+    if (!candidate?.plan) break;
+    if (availableThreads(ns, workerHosts(ns)) < candidate.plan.totalThreads) break;
+    if (!(await launchBatch(ns, candidate.target, candidate.plan, i * SPACING * 4))) break;
+    result.count++;
+    result.threads += candidate.plan.totalThreads;
+    result.lastTarget = candidate.target;
+    result.lastPlan = candidate.plan;
+    await ns.sleep(10);
+  }
+  return result;
+}
+
+function chooseBatchTarget(ns, readyOnly = true) {
+  return bestTargets(ns, 30)
     .filter((host) => ns.getServerMaxMoney(host) > 1000000)
-    .sort((a, b) => batchScore(ns, b).score - batchScore(ns, a).score)[0] ?? bestTargets(ns, 1)[0];
+    .map((target) => {
+      const plan = batchPlan(ns, target);
+      if (plan) plan.score = adjustedPlanScore(ns, target, plan);
+      return { target, plan, prepared: isPrepared(ns, target) };
+    })
+    .filter((entry) => entry.plan && (!readyOnly || entry.prepared))
+    .sort((a, b) => b.plan.score - a.plan.score)[0] ?? null;
 }
 
 function batchScore(ns, host) {
@@ -94,6 +117,30 @@ async function prepTarget(ns, target) {
   return { ready: true, action: "ready", threads: 0 };
 }
 
+function isPrepared(ns, target) {
+  const minSec = ns.getServerMinSecurityLevel(target);
+  const sec = ns.getServerSecurityLevel(target);
+  const maxMoney = ns.getServerMaxMoney(target);
+  const cash = ns.getServerMoneyAvailable(target);
+  return sec <= minSec + 2 && maxMoney > 0 && cash >= maxMoney * 0.95;
+}
+
+function adjustedPlanScore(ns, target, plan) {
+  const active = activeTargetThreads(ns, target);
+  const batchEquivalent = active / Math.max(1, plan.totalThreads);
+  return plan.rawScore / (1 + batchEquivalent * 0.35);
+}
+
+function activeTargetThreads(ns, target) {
+  let threads = 0;
+  for (const host of workerHosts(ns)) {
+    for (const proc of ns.ps(host)) {
+      if (proc.filename === HGW && proc.args?.[1] === target) threads += proc.threads;
+    }
+  }
+  return threads;
+}
+
 function batchPlan(ns, target) {
   const maxMoney = ns.getServerMaxMoney(target);
   const available = totalAvailableThreads(ns);
@@ -101,6 +148,7 @@ function batchPlan(ns, target) {
   const hackPerThread = Math.max(0.000001, hackPercentPerThread(ns, target));
   const hackThreads = Math.max(1, Math.floor(hackPercent / hackPerThread));
   const actualHackFraction = Math.min(0.9, hackThreads * hackPerThread);
+  const chance = hackChance(ns, target);
   const growFactor = 1 / Math.max(0.01, 1 - actualHackFraction);
   const growThreads = Math.max(1, Math.ceil(ns.growthAnalyze(target, growFactor)));
   const hackWeaken = Math.ceil((ns.hackAnalyzeSecurity(hackThreads, target) + 0.001) / ns.weakenAnalyze(1));
@@ -109,14 +157,21 @@ function batchPlan(ns, target) {
   const growTime = ns.getGrowTime(target);
   const hackTime = ns.getHackTime(target);
 
+  const totalThreads = hackThreads + growThreads + hackWeaken + growWeaken;
+  const cycle = weakenTime + SPACING * 4;
+  const expectedMoney = maxMoney * actualHackFraction * chance;
   return {
     maxMoney,
     hackThreads,
     growThreads,
     hackWeaken,
     growWeaken,
-    totalThreads: hackThreads + growThreads + hackWeaken + growWeaken,
-    cycle: weakenTime + SPACING * 4,
+    totalThreads,
+    cycle,
+    expectedMoney,
+    profitPerSecond: expectedMoney / Math.max(1, cycle / 1000),
+    rawScore: expectedMoney / Math.max(1, cycle) / Math.max(1, totalThreads),
+    score: expectedMoney / Math.max(1, cycle) / Math.max(1, totalThreads),
     actions: [
       { mode: "hack", threads: hackThreads, delay: Math.max(0, weakenTime - hackTime - SPACING * 3) },
       { mode: "weaken", threads: hackWeaken, delay: 0 },
@@ -127,7 +182,7 @@ function batchPlan(ns, target) {
 }
 
 function chooseHackFraction(ns, target, availableThreads) {
-  const candidates = [0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3];
+  const candidates = [0.04, 0.06, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5];
   let best = { fraction: Math.max(0.02, CONF.hackMoneyRatio), score: 0 };
   for (const fraction of candidates) {
     const plan = estimatePlan(ns, target, fraction);
@@ -185,12 +240,12 @@ function hasFormulas(ns) {
   return ns.fileExists("Formulas.exe", "home") && Boolean(ns.formulas?.hacking);
 }
 
-async function launchBatch(ns, target, plan) {
+async function launchBatch(ns, target, plan, baseDelay = 0) {
   const hosts = workerHosts(ns);
   for (const host of hosts) await deploy(ns, FILES, host);
   if (availableThreads(ns, hosts) < plan.totalThreads) return false;
   for (const action of plan.actions) {
-    if (!(await launchAcross(ns, hosts, action.mode, target, action.threads, action.delay))) return false;
+    if (!(await launchAcross(ns, hosts, action.mode, target, action.threads, action.delay + baseDelay))) return false;
   }
   return true;
 }
@@ -233,9 +288,9 @@ function freeRam(ns, host) {
 
 function homeReserve(ns) {
   const ram = ns.getServerMaxRam("home");
-  if (ram < 32) return 2;
-  if (ram < 128) return 8;
-  return Math.max(32, CONF.reserveHomeRam);
+  if (ram < 64) return 2;
+  if (ram < 256) return 4;
+  return Math.max(8, CONF.reserveHomeRam);
 }
 
 function readState(ns) {
@@ -261,5 +316,7 @@ function render(ns, action, target, plan, threads, state) {
   if (plan) {
     ns.print(`hack/grow/weaken: ${plan.hackThreads}/${plan.growThreads}/${plan.hackWeaken + plan.growWeaken}`);
     ns.print(`expected cycle: ${(plan.cycle / 1000).toFixed(1)}s`);
+    ns.print(`expected profit: ${money(ns, plan.expectedMoney)} (${money(ns, plan.profitPerSecond)}/s)`);
+    ns.print(`target score: ${plan.score.toExponential(3)}`);
   }
 }

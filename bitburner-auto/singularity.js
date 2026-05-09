@@ -25,7 +25,7 @@ export async function main(ns) {
     const objectives = readObjectives(ns);
     const endgame = readEndgame(ns);
     upgradeHome(ns, objectives);
-    if (objectives?.goals?.buyPrograms ?? true) buyUsefulPrograms(ns);
+    if (objectives?.goals?.buyPrograms ?? true) buyUsefulPrograms(ns, objectives);
     joinInvites(ns, endgame);
     if (!endgame?.trainingGoal) workForUsefulFaction(ns, endgame);
     buyAffordableAugmentations(ns, endgame);
@@ -34,13 +34,13 @@ export async function main(ns) {
   }
 }
 
-function buyUsefulPrograms(ns) {
+function buyUsefulPrograms(ns, objectives) {
   try {
     ns.singularity.purchaseTor();
   } catch {
     // SF4 level and money gates decide whether this is possible.
   }
-  for (const program of [
+  const programs = [
     "BruteSSH.exe",
     "FTPCrack.exe",
     "relaySMTP.exe",
@@ -51,8 +51,9 @@ function buyUsefulPrograms(ns) {
     "DeepscanV2.exe",
     "AutoLink.exe",
     "Formulas.exe",
-    "DarkscapeNavigator.exe",
-  ]) {
+  ];
+  if (objectives?.goals?.darknet) programs.push("DarkscapeNavigator.exe");
+  for (const program of programs) {
     if (!ns.fileExists(program, "home")) {
       try {
         if (ns.singularity.purchaseProgram(program)) ns.print(`Bought ${program}.`);

@@ -15,14 +15,15 @@ export async function main(ns) {
   ns.disableLog("ALL");
   openWindow(ns);
 
-  if (!ns.singularity) {
-    ns.tprint("backdoor: Singularity API unavailable. Backdoor automation needs Source-File 4.");
-    return;
-  }
-
   while (true) {
     const candidates = backdoorCandidates(ns);
     let action = "idle";
+
+    if (!ns.singularity) {
+      render(ns, "fallback: Singularity unavailable, showing manual paths only", candidates);
+      await ns.sleep(30000);
+      continue;
+    }
 
     for (const host of candidates) {
       const server = ns.getServer(host);
@@ -108,16 +109,20 @@ function render(ns, action, candidates) {
   ns.print("AUTO BACKDOOR");
   ns.print(`action: ${action}`);
   ns.print(`hacking level: ${ns.getHackingLevel()}`);
+  ns.print(`singularity: ${ns.singularity ? "available" : "unavailable"}`);
   ns.print("priority:");
   for (const host of candidates.slice(0, 12)) {
     const s = ns.getServer(host);
+    const path = pathTo(ns, host);
     const status = s.backdoorInstalled
       ? "done"
       : !ns.hasRootAccess(host)
         ? "no root"
         : ns.getServerRequiredHackingLevel(host) > ns.getHackingLevel()
           ? `needs hack ${ns.getServerRequiredHackingLevel(host)}`
-          : "ready";
+          : ns.singularity
+            ? "ready"
+            : `manual path: ${path.join(" > ")}`;
     ns.print(`  ${host}: ${status}`);
   }
 }

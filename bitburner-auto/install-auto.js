@@ -11,6 +11,7 @@ const FILES = [
   "batcher.js",
   "manager.js",
   "root.js",
+  "network-gui.js",
   "servers.js",
   "hacknet.js",
   "singularity.js",

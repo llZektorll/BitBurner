@@ -30,11 +30,22 @@ After install, the main script is:
 run auto/controller.js
 ```
 
+Optional network GUI:
+
+```text
+run auto/network-gui.js
+```
+
+It opens a live map of the network with buttons for root-all, per-server root, connect, backdoor, and killing scripts on a selected host. Clicking a server name tries to root it first, then connects to it when Singularity is available.
+
+If Singularity is not unlocked yet, automatic connect/backdoor/faction/training/crime actions are disabled or shown as manual fallback. Rooting, nuking, hacking, batch income, purchased servers, and the network map still work.
+
 ## Why This Pack Is Fast
 
 - **Money engine first**: early/mid game prioritizes hacking income, home RAM, port programs, and purchased servers.
 - **Aggressive rooter**: `/auto/root.js` loops continuously and nukes every eligible server as soon as port programs appear.
-- **Priority startup**: when unlocked and RAM allows it, the controller starts root, purchased servers, and IPvGO before lower-priority side systems.
+- **Speedrun economy**: the batcher keeps a pipeline of batches in flight instead of waiting for one cycle to finish.
+- **Priority startup**: when unlocked and RAM allows it, the controller starts root, purchased servers, batcher, and Singularity before lower-priority side systems.
 - **Early distributed hacking**: `/auto/early.js` uses rooted starter servers as worker RAM before the full batcher is active.
 - **Batch hacking at 32GB+**: `/auto/batcher.js` replaces the simple manager once home RAM reaches 32GB.
 - **Formulas-aware**: if `Formulas.exe` exists, the batcher uses formulas for better target scoring and thread tuning.
@@ -164,6 +175,7 @@ Scripts involved:
 ```text
 singularity.js
 root.js
+network-gui.js
 backdoor.js
 darknet.js
 ```
@@ -333,6 +345,7 @@ Hacking:
 /auto/batcher.js
 /auto/manager.js
 /auto/root.js
+/auto/network-gui.js
 /auto/servers.js
 /auto/hacknet.js
 ```

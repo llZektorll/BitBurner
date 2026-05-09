@@ -3,25 +3,16 @@ export async function main(ns) {
   ns.disableLog("ALL");
   openWindow(ns);
   const worker = "/auto/worker.js";
-  const targets = [
-    "n00dles",
-    "foodnstuff",
-    "sigma-cosmetics",
-    "joesguns",
-    "nectar-net",
-    "hong-fang-tea",
-    "harakiri-sushi",
-  ];
 
   while (true) {
-    for (const host of targets) tryRoot(ns, host);
-    const target = chooseTarget(ns, targets);
+    for (const host of scanAll(ns)) tryRoot(ns, host);
+    const target = chooseTarget(ns);
     const minSec = ns.getServerMinSecurityLevel(target);
     const sec = ns.getServerSecurityLevel(target);
     const maxMoney = ns.getServerMaxMoney(target);
     const cash = ns.getServerMoneyAvailable(target);
-    const rooted = targets.filter((host) => ns.hasRootAccess(host)).join(", ");
-    const deployed = await deployWorkers(ns, targets, worker, target);
+    const rooted = rootedServers(ns).filter((host) => host !== "home").join(", ");
+    const deployed = await deployWorkers(ns, rootedServers(ns), worker, target);
 
     ns.clearLog();
     ns.print("AUTO EARLY BOOTSTRAP");
@@ -57,31 +48,21 @@ function openWindow(ns) {
   }
 }
 
-function chooseTarget(ns, targets) {
+function chooseTarget(ns) {
   let best = "n00dles";
   let bestScore = 0;
-  for (const host of targets) {
+  for (const host of scanAll(ns)) {
     if (!ns.hasRootAccess(host)) continue;
     if (ns.getServerRequiredHackingLevel(host) > ns.getHackingLevel()) continue;
     const maxMoney = ns.getServerMaxMoney(host);
     if (maxMoney <= 0) continue;
-    const score = maxMoney * ns.hackAnalyzeChance(host);
+    const score = (maxMoney * ns.hackAnalyzeChance(host)) / Math.max(1, ns.getWeakenTime(host));
     if (score > bestScore) {
       best = host;
       bestScore = score;
     }
   }
   return best;
-}
-
-function tryRoot(ns, host) {
-  if (host === "home" || ns.hasRootAccess(host)) return true;
-  try {
-    ns.nuke(host);
-  } catch {
-    return false;
-  }
-  return ns.hasRootAccess(host);
 }
 
 async function deployWorkers(ns, hosts, worker, target) {
@@ -115,6 +96,40 @@ async function deployWorkers(ns, hosts, worker, target) {
     }
   }
   return { hosts: usedHosts.join(", "), threads };
+}
+
+function scanAll(ns) {
+  const seen = new Set(["home"]);
+  const queue = ["home"];
+  for (let i = 0; i < queue.length; i++) {
+    for (const next of ns.scan(queue[i])) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return [...seen];
+}
+
+function rootedServers(ns) {
+  return scanAll(ns).filter((host) => {
+    try {
+      return ns.hasRootAccess(host) && ns.getServerMaxRam(host) > 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function tryRoot(ns, host) {
+  if (host === "home" || ns.hasRootAccess(host)) return true;
+  try {
+    ns.nuke(host);
+  } catch {
+    return false;
+  }
+  return ns.hasRootAccess(host);
 }
 
 function money(ns, value) {

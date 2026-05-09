@@ -1,5 +1,5 @@
 const EARLY = "/auto/early.js";
-const PRIORITY_DAEMONS = ["/auto/root.js", "/auto/servers.js", "/auto/go.js"];
+const PRIORITY_DAEMONS = ["/auto/root.js", "/auto/servers.js", "/auto/batcher.js", "/auto/singularity.js", "/auto/go.js"];
 const DAEMONS = [
   "/auto/dashboard.js",
   "/auto/objectives.js",
@@ -79,7 +79,7 @@ function shouldRun(ns, script, homeRam, state) {
   }
 
   if (script === "/auto/singularity.js") {
-    return homeRam >= 128;
+    return homeRam >= 128 && Boolean(ns.singularity);
   }
 
   if (script === "/auto/backdoor.js") {
@@ -91,11 +91,11 @@ function shouldRun(ns, script, homeRam, state) {
   }
 
   if (script === "/auto/crime.js") {
-    return homeRam >= 128 && Boolean(state?.goals?.crime);
+    return homeRam >= 128 && Boolean(ns.singularity) && Boolean(state?.goals?.crime);
   }
 
   if (script === "/auto/training.js") {
-    return homeRam >= 128 && Boolean(state?.goals?.training);
+    return homeRam >= 128 && Boolean(ns.singularity) && Boolean(state?.goals?.training);
   }
 
   if (script === "/auto/stocks.js") return homeRam >= 128 && Boolean(state?.goals?.stocks);
@@ -104,7 +104,7 @@ function shouldRun(ns, script, homeRam, state) {
   if (script === "/auto/bladeburner.js") return homeRam >= 256 && Boolean(state?.goals?.bladeburner);
   if (script === "/auto/corp.js") return homeRam >= 512 && Boolean(state?.goals?.corp);
   if (script === "/auto/stanek.js") return homeRam >= 256 && Boolean(state?.goals?.stanek);
-  if (script === "/auto/go.js") return homeRam >= 256 && Boolean(ns.go);
+  if (script === "/auto/go.js") return homeRam >= 256 && Boolean(ns.go) && Boolean(state?.goals?.go);
   if (script === "/auto/darknet.js") return homeRam >= 256 && Boolean(state?.goals?.darknet);
 
   return true;
