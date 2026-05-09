@@ -55,7 +55,7 @@ function buyUsefulPrograms(ns) {
   ]) {
     if (!ns.fileExists(program, "home")) {
       try {
-        ns.singularity.purchaseProgram(program);
+        if (ns.singularity.purchaseProgram(program)) ns.print(`Bought ${program}.`);
       } catch {
         // Some programs are gated by hack level or version.
       }

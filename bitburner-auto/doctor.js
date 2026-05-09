@@ -36,6 +36,7 @@ const STATES = [
   "/auto/state-bitnode.txt",
   "/auto/state-worklock.txt",
   "/auto/state-darknet.txt",
+  "/auto/state-stocks.txt",
 ];
 
 const REMOVED_PATTERNS = ["n" + "Format", "format" + "Number"];
@@ -67,15 +68,16 @@ function audit(ns) {
   const removed = removedApiScan(ns);
   const stale = staleProcesses(ns);
   const capabilities = capabilityStatus(ns);
+  const root = rootProgress(ns);
   const controller = ns.isRunning("/auto/controller.js", "home");
 
-  summary.push(`doctor: files ${present}/${REQUIRED.length}, controller ${controller ? "running" : "stopped"}`);
+  summary.push(`doctor: files ${present}/${REQUIRED.length}, controller ${controller ? "running" : "stopped"}, root ${root.rooted}/${root.total}`);
   if (missing.length) summary.push(`doctor: missing ${missing.length} file(s), first: ${missing[0]}`);
   if (removed.length) summary.push(`doctor: removed API pattern(s) found: ${removed.length}`);
   if (stale.length) summary.push(`doctor: stale/stray automation processes: ${stale.length}`);
   if (!missing.length && !removed.length) summary.push("doctor: install looks coherent.");
 
-  return { summary, missing, ram, states, removed, stale, capabilities, controller };
+  return { summary, missing, ram, states, removed, stale, capabilities, controller, root };
 }
 
 function stateStatus(ns, file) {
@@ -182,6 +184,7 @@ function render(ns, report) {
   ns.print("");
   ns.print("capabilities:");
   for (const [key, value] of Object.entries(report.capabilities)) ns.print(`  ${key}: ${value}`);
+  ns.print(`root: ${report.root.rooted}/${report.root.total}, ports ${report.root.ports}/5`);
   ns.print("");
   ns.print("state files:");
   for (const state of report.states) ns.print(`  ${state.file}: ${state.status}`);
@@ -205,6 +208,17 @@ function render(ns, report) {
     ns.print("stale processes:");
     for (const proc of report.stale.slice(0, 20)) ns.print(`  ${proc.host} ${proc.pid} ${proc.file}: ${proc.reason}`);
   }
+}
+
+function rootProgress(ns) {
+  const hosts = scanAll(ns).filter((host) => host !== "home");
+  return {
+    total: hosts.length,
+    rooted: hosts.filter((host) => ns.hasRootAccess(host)).length,
+    ports: ["BruteSSH.exe", "FTPCrack.exe", "relaySMTP.exe", "HTTPWorm.exe", "SQLInject.exe"].filter((p) =>
+      ns.fileExists(p, "home"),
+    ).length,
+  };
 }
 
 function openWindow(ns) {

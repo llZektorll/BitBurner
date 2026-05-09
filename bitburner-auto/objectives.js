@@ -62,16 +62,18 @@ function buildState(ns) {
     phase = "programs";
     priority = `Buy TOR/port programs (${ports}/5 owned)`;
     shouldBuyPrograms = true;
-    serverSpend = 0.15;
+    serverSpend = 0.05;
     hacknetSpend = 0;
-    homeSpend = 0.45;
+    homeSpend = 0.25;
+    shouldBatch = true;
   } else if (homeRam < 128) {
     phase = "home-ram";
-    priority = "Push home RAM to 128GB for stable automation";
-    serverSpend = 0.25;
-    hacknetSpend = cash >= 10000000 ? 0.01 : 0;
-    homeSpend = 0.65;
+    priority = "Money engine first: batch hacking while pushing home RAM";
+    serverSpend = 0.35;
+    hacknetSpend = 0;
+    homeSpend = 0.5;
     shouldCrime = combat < 50 && cash < 50000000;
+    shouldBatch = true;
   } else if (pendingAugs >= 5) {
     phase = "install";
     priority = `Install ${pendingAugs} queued augmentations`;
@@ -97,27 +99,27 @@ function buildState(ns) {
     homeSpend = 0.35;
   } else if (cash < 1000000000) {
     phase = "fleet";
-    priority = "Expand purchased servers and improve income";
-    serverSpend = 0.5;
-    hacknetSpend = cash >= 10000000 ? 0.02 : 0;
-    homeSpend = 0.35;
+    priority = "Expand fleet and keep batch hacking";
+    serverSpend = 0.55;
+    hacknetSpend = 0;
+    homeSpend = 0.3;
     shouldCrime = false;
-    shouldBatch = homeRam >= 512;
+    shouldBatch = true;
   } else {
     phase = "scale";
     priority = "Scale fleet, buy augmentations, prepare late-game goals";
     shouldBuyPrograms = true;
     shouldShare = true;
     shouldCrime = combat < 100;
-    shouldStocks = cash > 10000000000;
-    shouldGang = true;
-    shouldSleeves = true;
-    shouldBladeburner = true;
+    shouldStocks = cash > 5000000000;
+    shouldGang = cash > 5000000000;
+    shouldSleeves = cash > 5000000000;
+    shouldBladeburner = cash > 5000000000;
     shouldCorp = cash > 200000000000;
-    shouldStanek = true;
-    shouldGo = true;
+    shouldStanek = cash > 5000000000;
+    shouldGo = cash > 5000000000;
     shouldDarknet = hasDarknet;
-    shouldBatch = homeRam >= 512;
+    shouldBatch = true;
     serverSpend = 0.45;
     hacknetSpend = 0.03;
     homeSpend = 0.45;
@@ -145,9 +147,9 @@ function buildState(ns) {
       serverSpend = 0.55;
       homeSpend = 0.25;
       hacknetSpend = cash >= 1000000000 ? 0.02 : 0;
-      shouldStocks = cash > 10000000000;
+      shouldStocks = cash > 1000000000;
       shouldCorp = cash > 200000000000;
-      shouldBatch = homeRam >= 512;
+      shouldBatch = true;
     } else if (endgame.mode === "world-daemon") {
       phase = "world-daemon";
       priority = endgame.next;
@@ -155,12 +157,18 @@ function buildState(ns) {
       serverSpend = 0.1;
       homeSpend = 0.5;
       hacknetSpend = 0;
-      shouldStocks = cash > 10000000000;
-      shouldBatch = homeRam >= 512;
+      shouldStocks = cash > 1000000000;
+      shouldBatch = true;
     }
     if (endgame.trainingGoal) {
       priority = `${priority}; ${endgame.trainingGoal.reason}`;
     }
+  }
+
+  if (ports < 5 && cash >= 200000) {
+    shouldBuyPrograms = true;
+    hacknetSpend = 0;
+    serverSpend = Math.min(serverSpend, 0.1);
   }
 
   if (strategy) {
@@ -172,7 +180,7 @@ function buildState(ns) {
     shouldSleeves = shouldSleeves || Boolean(strategy.preferSleeves);
     shouldBladeburner = shouldBladeburner || Boolean(strategy.preferBladeburner);
     shouldCorp = shouldCorp || (Boolean(strategy.preferCorp) && cash > 50000000000);
-    shouldStocks = shouldStocks || (Boolean(strategy.preferStocks) && cash > 1000000000);
+    shouldStocks = shouldStocks || (Boolean(strategy.preferStocks) && cash > 250000000);
     shouldStanek = shouldStanek || Boolean(strategy.preferStanek);
     shouldGo = shouldGo || Boolean(strategy.preferGo);
     if (strategy.preferHacknet && cash >= 10000000) hacknetSpend = Math.max(hacknetSpend, 0.05);

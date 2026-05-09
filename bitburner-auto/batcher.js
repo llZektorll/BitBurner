@@ -3,7 +3,7 @@ import { CONF, bestTargets, deploy, money, rootedServers, scanAll, tryRoot } fro
 const HGW = "/auto/hgw.js";
 const FILES = [HGW];
 const SPACING = 250;
-const MIN_RAM = 512;
+const MIN_RAM = 32;
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -14,7 +14,7 @@ export async function main(ns) {
     for (const host of scanAll(ns)) tryRoot(ns, host);
     const state = readState(ns);
     const target = chooseBatchTarget(ns);
-    if (!target || ns.getServerMaxRam("home") < MIN_RAM) {
+    if (!target || totalAvailableThreads(ns) < 4) {
       render(ns, "waiting", target, null, 0, state);
       await ns.sleep(10000);
       continue;
@@ -217,7 +217,7 @@ async function launchAcross(ns, hosts, mode, target, threads, delay) {
 
 function workerHosts(ns) {
   return rootedServers(ns)
-    .filter((host) => host !== "home" || ns.getServerMaxRam("home") >= MIN_RAM)
+    .filter((host) => ns.getServerMaxRam(host) > 0)
     .sort((a, b) => ns.getServerMaxRam(b) - ns.getServerMaxRam(a));
 }
 
@@ -227,8 +227,15 @@ function availableThreads(ns, hosts) {
 }
 
 function freeRam(ns, host) {
-  const reserve = host === "home" ? Math.max(32, CONF.reserveHomeRam) : 0;
+  const reserve = host === "home" ? homeReserve(ns) : 0;
   return Math.max(0, ns.getServerMaxRam(host) - ns.getServerUsedRam(host) - reserve);
+}
+
+function homeReserve(ns) {
+  const ram = ns.getServerMaxRam("home");
+  if (ram < 32) return 2;
+  if (ram < 128) return 8;
+  return Math.max(32, CONF.reserveHomeRam);
 }
 
 function readState(ns) {

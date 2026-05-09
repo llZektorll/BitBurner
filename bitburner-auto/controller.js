@@ -58,7 +58,7 @@ function shouldRun(ns, script, homeRam, state) {
   if (script === "/auto/bitnode.js") return homeRam >= 32;
   if (script === "/auto/endgame.js") return homeRam >= 64;
   if (script === "/auto/root.js") return true;
-  if (script === "/auto/batcher.js") return homeRam >= 512 && Boolean(state?.goals?.batch);
+  if (script === "/auto/batcher.js") return homeRam >= 32 && Boolean(state?.goals?.batch);
   if (script === "/auto/manager.js") return !Boolean(state?.goals?.batch);
   if (script === "/auto/contracts.js") return false;
 
@@ -92,7 +92,7 @@ function shouldRun(ns, script, homeRam, state) {
     return homeRam >= 128 && Boolean(state?.goals?.training);
   }
 
-  if (script === "/auto/stocks.js") return homeRam >= 256 && Boolean(state?.goals?.stocks);
+  if (script === "/auto/stocks.js") return homeRam >= 128 && Boolean(state?.goals?.stocks);
   if (script === "/auto/gang.js") return homeRam >= 256 && Boolean(state?.goals?.gang);
   if (script === "/auto/sleeves.js") return homeRam >= 256 && Boolean(state?.goals?.sleeves);
   if (script === "/auto/bladeburner.js") return homeRam >= 256 && Boolean(state?.goals?.bladeburner);

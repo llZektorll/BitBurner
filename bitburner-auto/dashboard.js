@@ -47,6 +47,7 @@ function snapshot(ns) {
   const homeRam = ns.getServerMaxRam("home");
   const usedRam = ns.getServerUsedRam("home");
   const scripts = runningModules(ns);
+  const root = rootProgress(ns);
   return {
     objectives,
     endgame,
@@ -58,6 +59,7 @@ function snapshot(ns) {
     homeRam,
     usedRam,
     scripts,
+    root,
   };
 }
 
@@ -65,6 +67,7 @@ function render(ns, s) {
   ns.clearLog();
   ns.print("AUTO DASHBOARD");
   ns.print(`cash: ${money(ns, s.cash)}   hack: ${skill(s.player, "hacking")}   home RAM: ${fmt(ns, s.usedRam)}/${fmt(ns, s.homeRam)}GB`);
+  ns.print(`root: ${s.root.rooted}/${s.root.total}   ports: ${s.root.ports}/5`);
   ns.print("");
   ns.print(`phase: ${s.objectives?.phase ?? "none"}`);
   ns.print(`priority: ${s.objectives?.priority ?? "none"}`);
@@ -96,6 +99,31 @@ function render(ns, s) {
   ns.print("");
   ns.print("running modules:");
   for (const line of moduleLines(s.scripts)) ns.print(`  ${line}`);
+}
+
+function rootProgress(ns) {
+  const hosts = scanAll(ns).filter((host) => host !== "home");
+  return {
+    total: hosts.length,
+    rooted: hosts.filter((host) => ns.hasRootAccess(host)).length,
+    ports: ["BruteSSH.exe", "FTPCrack.exe", "relaySMTP.exe", "HTTPWorm.exe", "SQLInject.exe"].filter((p) =>
+      ns.fileExists(p, "home"),
+    ).length,
+  };
+}
+
+function scanAll(ns) {
+  const seen = new Set(["home"]);
+  const queue = ["home"];
+  for (let i = 0; i < queue.length; i++) {
+    for (const next of ns.scan(queue[i])) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return [...seen];
 }
 
 function runningModules(ns) {
