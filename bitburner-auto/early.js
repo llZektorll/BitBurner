@@ -5,20 +5,22 @@ export async function main(ns) {
   const worker = "/auto/worker.js";
 
   while (true) {
-    for (const host of scanAll(ns)) tryRoot(ns, host);
-    const target = chooseTarget(ns);
+    const all = scanAll(ns);
+    for (const host of all) tryRoot(ns, host);
+    const rooted = rootedServers(ns, all);
+    const target = chooseTarget(ns, all);
     const minSec = ns.getServerMinSecurityLevel(target);
     const sec = ns.getServerSecurityLevel(target);
     const maxMoney = ns.getServerMaxMoney(target);
     const cash = ns.getServerMoneyAvailable(target);
-    const rooted = rootedServers(ns).filter((host) => host !== "home").join(", ");
-    const deployed = await deployWorkers(ns, rootedServers(ns), worker, target);
+    const rootedText = rooted.filter((host) => host !== "home").join(", ");
+    const deployed = await deployWorkers(ns, rooted, worker, target);
 
     ns.clearLog();
     ns.print("AUTO EARLY BOOTSTRAP");
     ns.print(`hacking level: ${ns.getHackingLevel()}`);
     ns.print(`home money: ${money(ns, ns.getServerMoneyAvailable("home"))}`);
-    ns.print(`rooted: ${rooted || "none yet"}`);
+    ns.print(`rooted: ${rootedText || "none yet"}`);
     ns.print(`worker hosts: ${deployed.hosts || "none yet"}`);
     ns.print(`worker threads: ${deployed.threads}`);
     ns.print(`target: ${target}`);
@@ -48,10 +50,10 @@ function openWindow(ns) {
   }
 }
 
-function chooseTarget(ns) {
+function chooseTarget(ns, hosts) {
   let best = "n00dles";
   let bestScore = 0;
-  for (const host of scanAll(ns)) {
+  for (const host of hosts) {
     if (!ns.hasRootAccess(host)) continue;
     if (ns.getServerRequiredHackingLevel(host) > ns.getHackingLevel()) continue;
     const maxMoney = ns.getServerMaxMoney(host);
@@ -112,8 +114,8 @@ function scanAll(ns) {
   return [...seen];
 }
 
-function rootedServers(ns) {
-  return scanAll(ns).filter((host) => {
+function rootedServers(ns, hosts) {
+  return hosts.filter((host) => {
     try {
       return ns.hasRootAccess(host) && ns.getServerMaxRam(host) > 0;
     } catch {

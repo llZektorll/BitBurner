@@ -1,3 +1,5 @@
+import { CONFIG } from "./config.js";
+
 const STATE_FILE = "/auto/state-objectives.txt";
 const ENDGAME_FILE = "/auto/state-endgame.txt";
 const BITNODE_FILE = "/auto/state-bitnode.txt";
@@ -56,22 +58,22 @@ function buildState(ns) {
     priority = "Speedrun: rush 32GB home RAM and starter hacking income";
     serverSpend = 0;
     hacknetSpend = 0;
-    homeSpend = 0.95;
+    homeSpend = CONFIG.budgets.bootstrapHome;
     shouldCrime = false;
   } else if (ports < 5 && cash >= 200000) {
     phase = "programs";
     priority = `Speedrun: buy port programs and unlock better targets (${ports}/5 owned)`;
     shouldBuyPrograms = true;
-    serverSpend = 0.25;
+    serverSpend = CONFIG.budgets.programsServers;
     hacknetSpend = 0;
-    homeSpend = 0.5;
+    homeSpend = CONFIG.budgets.programsHome;
     shouldBatch = true;
   } else if (homeRam < 128) {
     phase = "home-ram";
     priority = "Speedrun: batch hacking while rushing home RAM and server fleet";
-    serverSpend = 0.5;
+    serverSpend = CONFIG.budgets.earlyServers;
     hacknetSpend = 0;
-    homeSpend = 0.45;
+    homeSpend = CONFIG.budgets.earlyHome;
     shouldCrime = false;
     shouldBatch = true;
   } else if (pendingAugs >= 5) {
@@ -100,9 +102,9 @@ function buildState(ns) {
   } else if (cash < 1000000000) {
     phase = "fleet";
     priority = "Speedrun: expand fleet aggressively and keep batch RAM saturated";
-    serverSpend = 0.7;
+    serverSpend = CONFIG.budgets.fleetServers;
     hacknetSpend = 0;
-    homeSpend = 0.25;
+    homeSpend = CONFIG.budgets.fleetHome;
     shouldCrime = false;
     shouldBatch = true;
   } else {
@@ -111,18 +113,18 @@ function buildState(ns) {
     shouldBuyPrograms = true;
     shouldShare = pendingAugs > 0;
     shouldCrime = combat < 100;
-    shouldStocks = cash > 2000000000;
-    shouldGang = cash > 25000000000;
-    shouldSleeves = cash > 25000000000;
-    shouldBladeburner = cash > 25000000000;
-    shouldCorp = cash > 200000000000;
+    shouldStocks = cash > CONFIG.thresholds.stocksCash;
+    shouldGang = cash > CONFIG.thresholds.sideSystemCash;
+    shouldSleeves = cash > CONFIG.thresholds.sideSystemCash;
+    shouldBladeburner = cash > CONFIG.thresholds.sideSystemCash;
+    shouldCorp = cash > CONFIG.thresholds.corpCash;
     shouldStanek = cash > 5000000000;
-    shouldGo = cash > 25000000000;
+    shouldGo = cash > CONFIG.thresholds.goCash;
     shouldDarknet = hasDarknet;
     shouldBatch = true;
-    serverSpend = 0.6;
-    hacknetSpend = 0;
-    homeSpend = 0.35;
+    serverSpend = CONFIG.budgets.scaleServers;
+    hacknetSpend = CONFIG.budgets.hacknetDefault;
+    homeSpend = CONFIG.budgets.scaleHome;
   }
 
   if (endgame) {
@@ -183,7 +185,9 @@ function buildState(ns) {
     shouldStocks = shouldStocks || (Boolean(strategy.preferStocks) && cash > 250000000);
     shouldStanek = shouldStanek || Boolean(strategy.preferStanek);
     shouldGo = shouldGo || Boolean(strategy.preferGo);
-    if (strategy.preferHacknet && cash >= 10000000) hacknetSpend = Math.max(hacknetSpend, 0.12);
+    if (strategy.preferHacknet && cash >= CONFIG.thresholds.hacknetMinCash) {
+      hacknetSpend = Math.max(hacknetSpend, CONFIG.budgets.hacknetPreferred);
+    }
   }
 
   const totalSpend = serverSpend + homeSpend + hacknetSpend;

@@ -1,10 +1,11 @@
-import { CONF, bestTargets, deploy, money, rootedServers, scanAll, tryRoot } from "./lib.js";
+import { CONF, deploy, money, scanAll, tryRoot } from "./lib.js";
+import { CONFIG } from "./config.js";
 
 const HGW = "/auto/hgw.js";
 const FILES = [HGW];
-const SPACING = 120;
+const SPACING = CONFIG.batcher.spacingMs;
 const MIN_RAM = 32;
-const MAX_BATCHES_PER_PASS = 24;
+const MAX_BATCHES_PER_PASS = CONFIG.batcher.maxBatchesPerPass;
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -12,25 +13,27 @@ export async function main(ns) {
   ns.ui?.openTail?.();
 
   while (true) {
-    for (const host of scanAll(ns)) tryRoot(ns, host);
+    const all = scanAll(ns);
+    for (const host of all) tryRoot(ns, host);
+    const context = buildContext(ns, all);
     const state = readState(ns);
-    if (totalAvailableThreads(ns) < 4) {
-      const target = chooseBatchTarget(ns, false)?.target;
+    if (totalAvailableThreads(ns, context) < 4) {
+      const target = chooseBatchTarget(ns, context, false)?.target;
       render(ns, "waiting", target, null, 0, state);
       await ns.sleep(10000);
       continue;
     }
 
-    const launched = await launchDynamicPipeline(ns, state);
+    const launched = await launchDynamicPipeline(ns, context);
     if (launched.count > 0) {
       render(ns, `pipeline launched ${launched.count}`, launched.lastTarget, launched.lastPlan, launched.threads, state);
       await ns.sleep(SPACING * Math.max(1, launched.count));
       continue;
     }
 
-    const prepTargetName = chooseBatchTarget(ns, false)?.target;
+    const prepTargetName = chooseBatchTarget(ns, context, false)?.target;
     if (prepTargetName) {
-      const prep = await prepTarget(ns, prepTargetName);
+      const prep = await prepTarget(ns, prepTargetName, context);
       render(ns, prep.ready ? "ready but no RAM" : prep.action, prepTargetName, null, prep.threads, state);
       await ns.sleep(1000);
       continue;
@@ -41,13 +44,14 @@ export async function main(ns) {
   }
 }
 
-async function launchDynamicPipeline(ns) {
+async function launchDynamicPipeline(ns, context) {
   const result = { count: 0, threads: 0, lastTarget: null, lastPlan: null };
+  await deployMissing(ns, context.hosts);
   for (let i = 0; i < MAX_BATCHES_PER_PASS; i++) {
-    const candidate = chooseBatchTarget(ns, true);
+    const candidate = chooseBatchTarget(ns, context, true);
     if (!candidate?.plan) break;
-    if (availableThreads(ns, workerHosts(ns)) < candidate.plan.totalThreads) break;
-    if (!(await launchBatch(ns, candidate.target, candidate.plan, i * SPACING * 4))) break;
+    if (availableThreads(ns, context.hosts) < candidate.plan.totalThreads) break;
+    if (!(await launchBatch(ns, candidate.target, candidate.plan, i * SPACING * 4, context))) break;
     result.count++;
     result.threads += candidate.plan.totalThreads;
     result.lastTarget = candidate.target;
@@ -57,12 +61,12 @@ async function launchDynamicPipeline(ns) {
   return result;
 }
 
-function chooseBatchTarget(ns, readyOnly = true) {
-  return bestTargets(ns, 30)
-    .filter((host) => ns.getServerMaxMoney(host) > 1000000)
+function chooseBatchTarget(ns, context, readyOnly = true) {
+  const available = availableThreads(ns, context.hosts);
+  return context.targets
     .map((target) => {
-      const plan = batchPlan(ns, target);
-      if (plan) plan.score = adjustedPlanScore(ns, target, plan);
+      const plan = batchPlan(ns, target, context, available);
+      if (plan) plan.score = adjustedPlanScore(ns, target, plan, context);
       return { target, plan, prepared: isPrepared(ns, target) };
     })
     .filter((entry) => entry.plan && (!readyOnly || entry.prepared))
@@ -95,7 +99,7 @@ function minSecMaxMoneyServer(ns, host) {
   return server;
 }
 
-async function prepTarget(ns, target) {
+async function prepTarget(ns, target, context) {
   const minSec = ns.getServerMinSecurityLevel(target);
   const sec = ns.getServerSecurityLevel(target);
   const maxMoney = ns.getServerMaxMoney(target);
@@ -103,14 +107,14 @@ async function prepTarget(ns, target) {
 
   if (sec > minSec + 2) {
     const threads = Math.ceil((sec - minSec) / ns.weakenAnalyze(1));
-    await launchSimple(ns, "weaken", target, threads);
+    await launchSimple(ns, "weaken", target, threads, context);
     return { ready: false, action: "prepping weaken", threads };
   }
 
   if (maxMoney > 0 && cash < maxMoney * 0.95) {
     const factor = Math.max(1.01, maxMoney / Math.max(1, cash));
     const threads = Math.ceil(ns.growthAnalyze(target, factor));
-    await launchSimple(ns, "grow", target, threads);
+    await launchSimple(ns, "grow", target, threads, context);
     return { ready: false, action: "prepping grow", threads };
   }
 
@@ -122,18 +126,22 @@ function isPrepared(ns, target) {
   const sec = ns.getServerSecurityLevel(target);
   const maxMoney = ns.getServerMaxMoney(target);
   const cash = ns.getServerMoneyAvailable(target);
-  return sec <= minSec + 2 && maxMoney > 0 && cash >= maxMoney * 0.95;
+  return (
+    sec <= minSec + CONFIG.batcher.maxSecurityOverMin &&
+    maxMoney > 0 &&
+    cash >= maxMoney * CONFIG.batcher.minPreparedMoneyRatio
+  );
 }
 
-function adjustedPlanScore(ns, target, plan) {
-  const active = activeTargetThreads(ns, target);
+function adjustedPlanScore(ns, target, plan, context) {
+  const active = activeTargetThreads(ns, target, context);
   const batchEquivalent = active / Math.max(1, plan.totalThreads);
-  return plan.rawScore / (1 + batchEquivalent * 0.35);
+  return plan.rawScore / (1 + batchEquivalent * CONFIG.batcher.activeTargetPenalty);
 }
 
-function activeTargetThreads(ns, target) {
+function activeTargetThreads(ns, target, context) {
   let threads = 0;
-  for (const host of workerHosts(ns)) {
+  for (const host of context.hosts) {
     for (const proc of ns.ps(host)) {
       if (proc.filename === HGW && proc.args?.[1] === target) threads += proc.threads;
     }
@@ -141,9 +149,8 @@ function activeTargetThreads(ns, target) {
   return threads;
 }
 
-function batchPlan(ns, target) {
+function batchPlan(ns, target, context = buildContext(ns), available = totalAvailableThreads(ns, context)) {
   const maxMoney = ns.getServerMaxMoney(target);
-  const available = totalAvailableThreads(ns);
   const hackPercent = chooseHackFraction(ns, target, available);
   const hackPerThread = Math.max(0.000001, hackPercentPerThread(ns, target));
   const hackThreads = Math.max(1, Math.floor(hackPercent / hackPerThread));
@@ -182,7 +189,7 @@ function batchPlan(ns, target) {
 }
 
 function chooseHackFraction(ns, target, availableThreads) {
-  const candidates = [0.04, 0.06, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5];
+  const candidates = CONFIG.batcher.hackFractions;
   let best = { fraction: Math.max(0.02, CONF.hackMoneyRatio), score: 0 };
   for (const fraction of candidates) {
     const plan = estimatePlan(ns, target, fraction);
@@ -231,18 +238,17 @@ function weakenTime(ns, target) {
   return ns.formulas.hacking.weakenTime(minSecMaxMoneyServer(ns, target), ns.getPlayer());
 }
 
-function totalAvailableThreads(ns) {
+function totalAvailableThreads(ns, context = buildContext(ns)) {
   const ram = ns.getScriptRam(HGW, "home");
-  return workerHosts(ns).reduce((sum, host) => sum + Math.floor(freeRam(ns, host) / ram), 0);
+  return context.hosts.reduce((sum, host) => sum + Math.floor(freeRam(ns, host) / ram), 0);
 }
 
 function hasFormulas(ns) {
   return ns.fileExists("Formulas.exe", "home") && Boolean(ns.formulas?.hacking);
 }
 
-async function launchBatch(ns, target, plan, baseDelay = 0) {
-  const hosts = workerHosts(ns);
-  for (const host of hosts) await deploy(ns, FILES, host);
+async function launchBatch(ns, target, plan, baseDelay = 0, context = buildContext(ns)) {
+  const hosts = context.hosts;
   if (availableThreads(ns, hosts) < plan.totalThreads) return false;
   for (const action of plan.actions) {
     if (!(await launchAcross(ns, hosts, action.mode, target, action.threads, action.delay + baseDelay))) return false;
@@ -250,10 +256,17 @@ async function launchBatch(ns, target, plan, baseDelay = 0) {
   return true;
 }
 
-async function launchSimple(ns, mode, target, threads) {
-  const hosts = workerHosts(ns);
-  for (const host of hosts) await deploy(ns, FILES, host);
+async function launchSimple(ns, mode, target, threads, context = buildContext(ns)) {
+  const hosts = context.hosts;
+  await deployMissing(ns, hosts);
   await launchAcross(ns, hosts, mode, target, threads, 0);
+}
+
+async function deployMissing(ns, hosts) {
+  for (const host of hosts) {
+    if (host === "home" || ns.fileExists(HGW, host)) continue;
+    await deploy(ns, FILES, host);
+  }
 }
 
 async function launchAcross(ns, hosts, mode, target, threads, delay) {
@@ -270,10 +283,20 @@ async function launchAcross(ns, hosts, mode, target, threads, delay) {
   return false;
 }
 
-function workerHosts(ns) {
-  return rootedServers(ns)
-    .filter((host) => ns.getServerMaxRam(host) > 0)
+function buildContext(ns, all = scanAll(ns)) {
+  const hosts = all
+    .filter((host) => safe(() => ns.hasRootAccess(host) && ns.getServerMaxRam(host) > 0, false))
     .sort((a, b) => ns.getServerMaxRam(b) - ns.getServerMaxRam(a));
+  const targets = all
+    .filter((host) => safe(() => ns.hasRootAccess(host), false))
+    .filter((host) => safe(() => ns.getServerMaxMoney(host), 0) > 1000000)
+    .filter((host) => safe(() => ns.getServerRequiredHackingLevel(host), Infinity) <= ns.getHackingLevel())
+    .map((host) => ({ host, score: batchScore(ns, host).score }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 30)
+    .map((entry) => entry.host);
+  return { hosts, targets };
 }
 
 function availableThreads(ns, hosts) {
@@ -318,5 +341,13 @@ function render(ns, action, target, plan, threads, state) {
     ns.print(`expected cycle: ${(plan.cycle / 1000).toFixed(1)}s`);
     ns.print(`expected profit: ${money(ns, plan.expectedMoney)} (${money(ns, plan.profitPerSecond)}/s)`);
     ns.print(`target score: ${plan.score.toExponential(3)}`);
+  }
+}
+
+function safe(fn, fallback) {
+  try {
+    return fn();
+  } catch {
+    return fallback;
   }
 }

@@ -27,7 +27,19 @@ run install-auto.js https://raw.githubusercontent.com/llZektorll/BitBurner/maste
 After install, the main script is:
 
 ```text
+run auto/Loader.js
+```
+
+Legacy entrypoint still works and forwards to the loader:
+
+```text
 run auto/controller.js
+```
+
+Global settings live in:
+
+```text
+/auto/config.js
 ```
 
 Optional network GUI:
@@ -45,18 +57,19 @@ If Singularity is not unlocked yet, automatic connect/backdoor/faction/training/
 - **Money engine first**: early/mid game prioritizes hacking income, home RAM, port programs, and purchased servers.
 - **Aggressive rooter**: `/auto/root.js` loops continuously and nukes every eligible server as soon as port programs appear.
 - **Speedrun economy**: the batcher keeps a pipeline of batches in flight instead of waiting for one cycle to finish.
-- **Priority startup**: when unlocked and RAM allows it, the controller starts root, purchased servers, batcher, and Singularity before lower-priority side systems.
+- **Loader driven**: `/auto/Loader.js` reads `/auto/config.js`, checks IPvGO first, then starts/stops configured scripts with a live status GUI.
+- **Priority startup**: when unlocked and RAM allows it, the loader starts root, purchased servers, batcher, and Singularity before lower-priority side systems.
 - **Early distributed hacking**: `/auto/early.js` uses rooted starter servers as worker RAM before the full batcher is active.
 - **Batch hacking at 32GB+**: `/auto/batcher.js` replaces the simple manager once home RAM reaches 32GB.
 - **Formulas-aware**: if `Formulas.exe` exists, the batcher uses formulas for better target scoring and thread tuning.
-- **Not everything runs at once**: objectives and controller gate side systems until they are actually useful.
+- **Not everything runs at once**: objectives and Loader gate side systems until they are actually useful.
 
 ## First Run Checklist
 
 With a fresh 8GB home server:
 
 ```text
-run auto/controller.js
+run auto/Loader.js
 tail auto/dashboard.js
 tail auto/root.js
 ```
@@ -328,6 +341,8 @@ Core:
 
 ```text
 /auto/controller.js
+/auto/Loader.js
+/auto/config.js
 /auto/lib.js
 /auto/dashboard.js
 /auto/objectives.js

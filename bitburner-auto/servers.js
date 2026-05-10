@@ -10,6 +10,7 @@ import {
   readObjectives,
   upgradeServer,
 } from "./lib.js";
+import { CONFIG } from "./config.js";
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -27,7 +28,7 @@ export async function main(ns) {
     const limit = purchasedServerLimit(ns);
     const maxRam = purchasedServerMaxRam(ns);
 
-    while (actions < 20) {
+    while (actions < CONFIG.servers.maxActionsPerPass) {
       owned = purchasedServers(ns);
       const remainingBudget = Math.max(0, budget - spent);
       const targetRam = affordableRam(ns, remainingBudget, maxRam);
@@ -46,7 +47,7 @@ export async function main(ns) {
         const weakest = owned
           .map((host) => ({ host, ram: ns.getServerMaxRam(host) }))
           .sort((a, b) => a.ram - b.ram)[0];
-        if (!weakest || targetRam < weakest.ram * 2) break;
+        if (!weakest || targetRam < weakest.ram * CONFIG.servers.minUpgradeMultiplier) break;
         if (upgradeServer(ns, weakest.host, targetRam)) {
           spent += cost;
           actions++;
@@ -72,7 +73,7 @@ export async function main(ns) {
         budget,
       )}`,
     );
-    await ns.sleep(actions > 0 ? 1000 : 5000);
+    await ns.sleep(actions > 0 ? CONFIG.servers.activeSleepMs : CONFIG.servers.idleSleepMs);
   }
 }
 

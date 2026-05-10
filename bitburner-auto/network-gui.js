@@ -171,7 +171,7 @@ function serverRow(ns, host, path, ports) {
     backdoored,
     requiredPorts,
     requiredHack,
-    ram: `${formatNumber(usedRam)}/${formatNumber(maxRam)}GB`,
+    ram: `${formatRam(usedRam)}/${formatRam(maxRam)}GB`,
     money: maxMoney > 0 ? money(ns, maxMoney) : "-",
     purchased: Boolean(server.purchasedByPlayer),
   };
@@ -455,7 +455,7 @@ function openWindow(ns) {
   }
 }
 
-function formatNumber(value) {
+function formatRam(value) {
   if (!Number.isFinite(value)) return "0";
   if (value >= 1024) return `${(value / 1024).toFixed(1)}T`;
   if (value >= 1) return value.toFixed(1);

@@ -1,4 +1,6 @@
 const FILES = [
+  "Loader.js",
+  "config.js",
   "controller.js",
   "lib.js",
   "dashboard.js",
@@ -30,6 +32,8 @@ const FILES = [
   "darknet.js",
   "contracts.js",
   "doctor.js",
+  "README.md",
+  "implementation.md",
 ];
 
 /** @param {NS} ns */

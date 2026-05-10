@@ -1,4 +1,6 @@
 const REQUIRED = [
+  "/auto/Loader.js",
+  "/auto/config.js",
   "/auto/controller.js",
   "/auto/lib.js",
   "/auto/dashboard.js",
